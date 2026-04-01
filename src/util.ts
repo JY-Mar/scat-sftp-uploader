@@ -1,5 +1,5 @@
 import chalk from 'chalk'
-const slog:any = require('single-line-log').stdout
+import { stdout } from 'single-line-log'
 
 import { PointLog, ProgressBar, ProgressOpt } from './type.d'
 
@@ -32,10 +32,10 @@ const pointLog: PointLog = (text, type = 'info') => {
  * @param description 命令行开头的文字信息
  * @param bar_length 进度条的长度(单位：字符)，默认设为 25
  */
-const progressBar:ProgressBar = (description = '进度', bar_length = 25) => {
+const progressBar: ProgressBar = (description = '进度', bar_length = 25) => {
   // 两个基本参数(属性)
   return (opts: ProgressOpt) => {
-    let percent:any = (opts.completed / opts.total).toFixed(4) // 计算进度(子任务的 完成数 除以 总数)
+    let percent: any = (opts.completed / opts.total).toFixed(4) // 计算进度(子任务的 完成数 除以 总数)
     let cell_num = Math.floor(percent * bar_length) // 计算需要多少个 █ 符号来拼凑图案 // 拼接黑色条
     let cell = ''
     for (let i = 0; i < cell_num; i++) {
@@ -45,11 +45,9 @@ const progressBar:ProgressBar = (description = '进度', bar_length = 25) => {
     for (let i = 0; i < bar_length - cell_num; i++) {
       empty += '░'
     } // 拼接最终文本
-    let cmdText = `  - ${description}: ${cell}${empty} ${(
-      100 * percent
-    ).toFixed(2)}% (${opts.completed}/${opts.total})` // 在单行输出文本
+    let cmdText = `  - ${description}: ${cell}${empty} ${(100 * percent).toFixed(2)}% (${opts.completed}/${opts.total})` // 在单行输出文本
     // slog(pointLog(cmdText))
-    slog(cmdText)
+    stdout(cmdText)
   }
 }
 

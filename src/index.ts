@@ -1,15 +1,15 @@
-const fs = require('fs')
-const glob = require('glob')
-const Client = require('ssh2-sftp-client')
-const { pointLog, progressBar,  } = require('./util')
-import { SftpUploaderParm, ConnectConfig } from './type.d'
+import fs from 'fs'
+import path from 'path'
+import glob from 'glob'
+import SftpClient from 'ssh2-sftp-client'
+import { pointLog, progressBar } from './util'
+import type { SftpUploaderOptions } from './type.d'
 import type { Plugin } from 'vite'
 
-
-function sftpUploader(options: SftpUploaderParm): Plugin {
-  const sftp = new Client()
-  let trim:any = null,
-    isFirst:boolean = true, // 防止多次调用
+function sftpUploader(options: SftpUploaderOptions): Plugin {
+  const sftp = new SftpClient()
+  let trim: any = null,
+    isFirst: boolean = true, // 防止多次调用
     timer: number = 0
 
   let url = options.url
@@ -17,16 +17,16 @@ function sftpUploader(options: SftpUploaderParm): Plugin {
     url = url + '/' // 如果上传目录没有以 / 结尾，自动加上，否则找不到文件
   }
 
-  let config: ConnectConfig = {
+  let config: SftpClient.ConnectOptions = {
     host: options.host, // 服务器地址
-    port: options.port,
+    port: Number(options.port || 22),
     username: options.username,
     password: options.password
   }
 
   // webpack钩子
-  function apply (compiler:any): string {
-    if(compiler && compiler.hooks && compiler.hooks.done) {
+  function apply(compiler: any): string {
+    if (compiler && compiler.hooks && compiler.hooks.done) {
       compiler.hooks.done.tap('sftp-uploader', () => {
         isPut()
       })
@@ -35,11 +35,11 @@ function sftpUploader(options: SftpUploaderParm): Plugin {
   }
 
   // 判断环境，查看是否可以上传
-  function isPut () {
-    const ARGV_DEPLOY = process.argv.some(_ => _.includes('deploy')) || false // 从命令中获取deploy
+  function isPut() {
+    const ARGV_DEPLOY = process.argv.some((_) => _.includes('deploy')) || false // 从命令中获取deploy
     // 低版本npm不支持
     // const IS_DEPLOY = process.env.npm_config_argv?.includes('deploy') || false // 读取命令判断
-    
+
     const UPLOAD = !!process.env.UPLOAD // 手动设置UPLOAD
     if (ARGV_DEPLOY || UPLOAD) {
       clearTimeout(trim)
@@ -49,7 +49,7 @@ function sftpUploader(options: SftpUploaderParm): Plugin {
     }
   }
 
-  function put () {
+  function put() {
     isFirst = false
     // 自动上传到FTP服务器
     if (!options.dir) {
@@ -73,7 +73,7 @@ function sftpUploader(options: SftpUploaderParm): Plugin {
       })
   }
 
-  function pullDir () {
+  function pullDir() {
     sftp
       .list(options.url)
       .then((files: any[]) => {
@@ -99,7 +99,7 @@ function sftpUploader(options: SftpUploaderParm): Plugin {
       })
   }
 
-  async function deleteServerFile (list: any[]) {
+  async function deleteServerFile(list: any[]) {
     const total = list.length
     if (total > 0) {
       // 删除服务器上文件(夹)
@@ -108,47 +108,50 @@ function sftpUploader(options: SftpUploaderParm): Plugin {
       for (const fileInfo of list) {
         i++
         speed({ completed: i, total })
-        const path = options.url + fileInfo.name
+        const path = url + fileInfo.name
         if (fileInfo.type === '-') {
           await sftp.delete(path)
         } else {
           await sftp.rmdir(path, true)
         }
       }
-      pointLog(`\n  - 已删除${total}个文件或目录`, 'success')
+      pointLog(`\n  - 删除成功`, 'success')
     }
 
-    return new Promise<void>(resovle => {
+    return new Promise<void>((resovle) => {
       resovle()
     })
   }
 
-  function globLocalFile () {
+  function globLocalFile() {
+    let localDir = `${options.dir}${options.dir.endsWith('/') ? '**' : '/**'}`
     // 获取本地路径所有文件
-    glob(options.dir + '**', (er: any, files: string[]) => {
+    glob(localDir, (err: any, files: string[]) => {
       // 本地目录下所有文件(夹)的路径
       files.splice(0, 1) // 删除路径../dist/
       if (options.uploadFilter && typeof options.uploadFilter === 'function') {
         files = files.filter((x: any) => options.uploadFilter(x))
       }
+
       uploadFileToSftp(files)
     })
   }
 
-  async function uploadFileToSftp (files: string[]) {
+  async function uploadFileToSftp(files: string[]) {
     // 传输文件到服务器
     const speed = progressBar('上传中') // 上传进度条
-    const total:number = files.length
+    const total: number = files.length
     let i = 0
     for (const localSrc of files) {
       i++
-      const targetSrc = localSrc.replace(options.dir.replace(/\\/g, '/'), options.url)
+      const _localSrc = path.resolve(localSrc) // 获取完整路径
+      const targetSrc = _localSrc.replace(options.dir, options.url).replace(/\\/g, '/')
       speed({ completed: i, total })
-      if (fs.lstatSync(localSrc).isDirectory()) {
+      if (fs.lstatSync(_localSrc).isDirectory()) {
         // 是文件夹
         await sftp.mkdir(targetSrc)
       } else {
-        await sftp.put(localSrc, targetSrc)
+        await sftp.put(_localSrc, targetSrc)
       }
     }
     pointLog(`\n  - 已上传${files.length}个文件`, 'success')
@@ -159,7 +162,7 @@ function sftpUploader(options: SftpUploaderParm): Plugin {
     sftp.end()
   }
 
-  function exError (err: string) {
+  function exError(err: string) {
     sftp.end()
     pointLog(`  - sftpError:${err}`, 'error')
   }

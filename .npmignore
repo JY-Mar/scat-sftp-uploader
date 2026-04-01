@@ -1,0 +1,17 @@
+dist/rollup.config.dev.js
+dist/vite.config.js
+
+node_modules/
+src/
+__test__/
+
+.editorconfig
+.gitignore
+prettier*
+
+*.config.*
+
+tsconfig*.json
+
+.vscode
+.husky
