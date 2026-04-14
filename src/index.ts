@@ -27,7 +27,7 @@ function sftpUploader(options: SftpUploaderOptions): Plugin {
   // webpack钩子
   function apply(compiler: any): string {
     if (compiler && compiler.hooks && compiler.hooks.done) {
-      compiler.hooks.done.tap('sftp-uploader', () => {
+      compiler.hooks.done.tap('scat-sftp-uploader', () => {
         isPut()
       })
     }
@@ -59,7 +59,7 @@ function sftpUploader(options: SftpUploaderOptions): Plugin {
 
     timer = Date.now()
 
-    pointLog('\n$sftp-uploader')
+    pointLog('\n$scat-sftp-uploader')
 
     sftp
       .connect(config)
@@ -168,7 +168,7 @@ function sftpUploader(options: SftpUploaderOptions): Plugin {
   }
 
   return {
-    name: 'sftp-uploader',
+    name: 'scat-sftp-uploader',
     // @ts-ignore 因为要兼容webpack，所以会导致vite校验不通过
     apply, // webpack钩子
     put,

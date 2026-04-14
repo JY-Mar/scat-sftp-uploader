@@ -1,18 +1,18 @@
-# sftp-uploader
+# scat-sftp-uploader
 
-> `sftp-uploader` 是一款基于 `ssh2-sftp-client` 封装的文件上传插件，支持 `webpack` 及 `vite` ，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`或`vite`插件或`单独`使用，支持自动创建上传目录。
+> `scat-sftp-uploader` 是一款基于 `ssh2-sftp-client` 封装的文件上传插件，支持 `webpack` 及 `vite` ，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`或`vite`插件或`单独`使用，支持自动创建上传目录。
 
 ## Install
-![NPM](https://nodei.co/npm/sftp-uploader.png)
+![NPM](https://nodei.co/npm/scat-sftp-uploader.png)
 ```sh
-$ yarn add sftp-uploader
-$ npm i sftp-uploader
+$ yarn add scat-sftp-uploader
+$ npm i scat-sftp-uploader
 ```
 ## 配置
 
 ```javascript
 const path = require('path')
-const SftpUploader = require('sftp-uploader')
+const SftpUploader = require('scat-sftp-uploader')
 
 const sftp = SftpUploader({
   dir: path.join(__dirname, 'dist/'), // 需要上传文件的目录

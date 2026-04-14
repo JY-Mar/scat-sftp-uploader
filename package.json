@@ -1,7 +1,7 @@
 {
-  "name": "sftp-uploader",
+  "name": "scat-sftp-uploader",
   "version": "1.0.0",
-  "description": "sftp-uploader",
+  "description": "sftp uploader",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
   "files": [
