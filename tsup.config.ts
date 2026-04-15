@@ -1,57 +1,39 @@
 import { defineConfig, type Options } from 'tsup'
 
 export default defineConfig(() => {
+  const entry = ['src/index.ts']
   const shared: Options = {
-    /**
-     * 入口
-     */
-    entry: ['src/index.ts'],
-    /**
-     * 输出目录
-     */
+    entry,
     outDir: 'dist',
-    /**
-     * 输出文件扩展名
-     */
-    outExtension({ format }) {
-      return {
-        js: `.${format}.js`
-      }
-    },
-    /**
-     * 构建前清空 dist
-     */
     clean: true,
-    /**
-     * 生成 sourcemap
-     */
     sourcemap: false,
-    /**
-     * 压缩代码
-     */
-    minify: true
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: ['log']
+      },
+      mangle: {
+        eval: true,
+        toplevel: true
+      },
+      format: {
+        comments: false
+      }
+    }
   }
   return [
     {
       ...shared,
-      /**
-       * 输出格式
-       */
-      format: ['cjs'],
-      /**
-       * 生成 .d.ts
-       */
-      dts: true
+      format: ['esm'],
+      dts: {
+        bundle: true,
+        entry,
+        out: 'index.d.ts'
+      }
     },
     {
       ...shared,
-      /**
-       * 输出格式
-       */
-      format: ['esm'],
-      /**
-       * 保证只生成一份声明文件
-       */
+      format: ['cjs'],
       dts: false
     }
   ]
