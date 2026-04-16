@@ -3,16 +3,19 @@
 > `scat-sftp-uploader` 是一款基于 `ssh2-sftp-client` 封装的文件上传插件，支持 `webpack` 及 `vite` ，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`或`vite`插件或`单独`使用，支持自动创建上传目录。
 
 ## Install
-![NPM](https://nodei.co/npm/scat-sftp-uploader.png)
+
+![NPM](https://nodei.co/npm/@scat1995/deployer.png)
+
 ```sh
-$ yarn add scat-sftp-uploader
-$ npm i scat-sftp-uploader
+yarn add @scat1995/deployer
+npm i @scat1995/deployer
 ```
+
 ## 配置
 
 ```javascript
 const path = require('path')
-const SftpUploader = require('scat-sftp-uploader')
+const SftpUploader = require('@scat1995/deployer')
 
 const sftp = SftpUploader({
   dir: path.join(__dirname, 'dist/'), // 需要上传文件的目录
@@ -32,8 +35,10 @@ const sftp = SftpUploader({
 })
 ```
 
-# 使用
-## 配合打包命令使用
+## 使用
+
+### 配合打包命令使用
+
 ```javascript
 // webpack中使用
 //vue.config.js
@@ -69,12 +74,12 @@ export default defineConfig({
 // 使用 yarn deploy 或 npm run deploy
 ```
 
-## 上传任意项目
+### 上传任意项目
+
 ```javascript
 // 1、在项目中创建uploader.js
 // 2、配置和webpack插件模式相同
 SftpUploader({ ... }).put()
 // 然后在项目根目录终端下运行如下命令
-node uploader.js 
+node uploader.js
 ```
-

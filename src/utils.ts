@@ -1,7 +1,6 @@
 import chalk from 'chalk'
 import { stdout } from 'single-line-log'
-
-import { PointLog, ProgressBar, ProgressOpt } from './type.d'
+import { PointLog, ProgressBar, ProgressOpt } from './type'
 
 /**
  * 打印日志
@@ -24,7 +23,7 @@ const pointLog: PointLog = (text, type = 'info') => {
       outputText = chalk.cyanBright(outputText)
   }
 
-  console.log(outputText)
+  console.info(outputText)
 }
 
 /**

@@ -2,11 +2,13 @@ import fs from 'fs'
 import path from 'path'
 import glob from 'glob'
 import SftpClient from 'ssh2-sftp-client'
-import { pointLog, progressBar } from './util'
-import type { SftpUploaderOptions } from './type.d'
-import type { Plugin } from 'vite'
+import { pointLog, progressBar } from './utils'
+import type { DeployerInputOptions } from './type'
+import { createUnplugin, type UnpluginInstance, type UnpluginOptions, type WebpackPluginInstance } from 'unplugin'
 
-function sftpUploader(options: SftpUploaderOptions): Plugin {
+const name: string = 'Deployer'
+
+function sftpUploader(options: DeployerInputOptions): UnpluginOptions {
   const sftp = new SftpClient()
   let trim: any = null,
     isFirst: boolean = true, // 防止多次调用
@@ -168,16 +170,34 @@ function sftpUploader(options: SftpUploaderOptions): Plugin {
   }
 
   return {
-    name: 'scat-sftp-uploader',
-    // @ts-ignore 因为要兼容webpack，所以会导致vite校验不通过
-    apply, // webpack钩子
+    name,
+    // @ts-ignore
     put,
-    // vite上传钩子
-    closeBundle() {
+    buildEnd() {
+      // 判断 Vue CLI 的多编译器模式
+      if (process.env.VUE_CLI_MODERN_MODE && !process.env.VUE_CLI_MODERN_BUILD) {
+        // !!! 跳过 !!! Modern Mode 第一轮 (Legacy Bundle)：生成兼容旧浏览器的 JS 文件
+        return
+      }
       isPut()
     }
   }
 }
 
-export default sftpUploader
-module.exports = sftpUploader
+const Deployer = {
+  ...createUnplugin(sftpUploader),
+  put: (options: DeployerInputOptions) => (sftpUploader(options) as any).put()
+} as Omit<UnpluginInstance<DeployerInputOptions, boolean>, 'vite'> & { vite: UnpluginInstance<DeployerInputOptions, boolean>['rollup'] }
+
+export default Deployer
+export const RollupPluginDeployer = Deployer.rollup
+export const VitePluginDeployer = Deployer.vite
+export class DeployerWebpackPlugin {
+  private instance: WebpackPluginInstance
+  constructor(options?: DeployerInputOptions) {
+    this.instance = Deployer.webpack(options)
+  }
+  apply(compiler: any): void {
+    this.instance.apply(compiler)
+  }
+}

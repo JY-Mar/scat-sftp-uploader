@@ -9,7 +9,7 @@ export interface ProgressOpt {
   total: number
 }
 
-export interface SftpUploaderOptions {
+export interface DeployerInputOptions {
   /**
    * 需要上传文件的目录
    */
@@ -19,19 +19,19 @@ export interface SftpUploaderOptions {
    */
   url: string
   /**
-   * sftp 地址
+   * （远程服务器） 地址
    */
   host: string
   /**
-   * sftp 端口，默认 22
+   * （远程服务器） 端口，默认 22
    */
   port?: number | string
   /**
-   * 账号
+   * （远程服务器）账号
    */
   username: string
   /**
-   * 密码
+   * （远程服务器）密码
    */
   password: string
   /**
