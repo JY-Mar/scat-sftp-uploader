@@ -19,7 +19,8 @@ export default defineConfig(() => {
       format: {
         comments: false
       }
-    }
+    },
+    external: ['fs', 'path', 'os', 'process', 'unplugin', 'ssh2-sftp-client']
   }
   return [
     {

@@ -2,199 +2,292 @@ import fs from 'fs'
 import path from 'path'
 import glob from 'glob'
 import SftpClient from 'ssh2-sftp-client'
-import { pointLog, progressBar } from './utils'
-import type { DeployerInputOptions } from './type'
-import { createUnplugin, type UnpluginInstance, type UnpluginOptions, type WebpackPluginInstance } from 'unplugin'
+import { consoler, progbar } from './utils'
+import { type UnpluginInstance, type UnpluginOptions, type WebpackPluginInstance, createUnplugin } from 'unplugin'
+import WebDeployer from './type'
 
-const name: string = 'Deployer'
+const name = 'Deployer'
 
-function sftpUploader(options: DeployerInputOptions): UnpluginOptions {
+function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & { execute: WebDeployer.InternalExecute } {
   const sftp = new SftpClient()
   let trim: any = null,
     isFirst: boolean = true, // 防止多次调用
     timer: number = 0
 
-  let url = options.url
-  if (!url.endsWith('/')) {
-    url = url + '/' // 如果上传目录没有以 / 结尾，自动加上，否则找不到文件
+  const uploadConfig = {
+    pkgDir: typeof options.dir === 'string' ? options.dir : '',
+    sshPath: typeof options.url === 'string' ? options.url : '',
+    previewPath: typeof options.previewPath === 'string' ? options.previewPath : '',
+    delay: typeof options.delay === 'number' ? options.delay : 0,
+    uploadFilter: options.uploadFilter && typeof options?.uploadFilter === 'function' ? options.uploadFilter : undefined,
+    deleteFilter: options.deleteFilter && typeof options?.deleteFilter === 'function' ? options.deleteFilter : undefined
+  }
+  if (uploadConfig?.pkgDir) {
+    uploadConfig.pkgDir = uploadConfig.pkgDir.replace(/\\/g, '/').replace(/\/+/g, '/')
+  }
+  if (uploadConfig?.sshPath) {
+    uploadConfig.sshPath = uploadConfig.sshPath.replace(/\\/g, '/').replace(/\/+/g, '/')
+    if (!uploadConfig.sshPath.endsWith('/')) {
+      uploadConfig.sshPath = uploadConfig.sshPath + '/' // 如果上传目录没有以 / 结尾，自动加上，否则找不到文件
+    }
   }
 
-  let config: SftpClient.ConnectOptions = {
+  /**
+   * SSH 连接配置
+   */
+  const sshConfig: SftpClient.ConnectOptions = {
     host: options.host, // 服务器地址
     port: Number(options.port || 22),
     username: options.username,
     password: options.password
   }
 
-  // webpack钩子
-  function apply(compiler: any): string {
-    if (compiler && compiler.hooks && compiler.hooks.done) {
-      compiler.hooks.done.tap('scat-sftp-uploader', () => {
-        isPut()
-      })
-    }
-    return 'build'
-  }
-
   // 判断环境，查看是否可以上传
-  function isPut() {
-    const ARGV_DEPLOY = process.argv.some((_) => _.includes('deploy')) || false // 从命令中获取deploy
-    // 低版本npm不支持
-    // const IS_DEPLOY = process.env.npm_config_argv?.includes('deploy') || false // 读取命令判断
+  async function endHandler(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const ARGV_DEPLOY = process.argv.some((_) => _.includes('deploy')) || false // 从命令中获取deploy
+      // 低版本npm不支持
+      // const IS_DEPLOY = process.env.npm_sshConfig_argv?.includes('deploy') || false // 读取命令判断
 
-    const UPLOAD = !!process.env.UPLOAD // 手动设置UPLOAD
-    if (ARGV_DEPLOY || UPLOAD) {
-      clearTimeout(trim)
-      trim = setTimeout(() => {
-        isFirst && put() // 开始上传逻辑
-      }, options.delay || 0)
-    }
+      const UPLOAD = !!process.env.UPLOAD // 手动设置UPLOAD
+      if (ARGV_DEPLOY || UPLOAD) {
+        clearTimeout(trim)
+        trim = setTimeout(() => {
+          if (isFirst) {
+            // 开始上传逻辑
+            startUpload()
+              .then(() => {
+                resolve()
+              })
+              .catch((err) => {
+                reject(err)
+              })
+          } else {
+            consoler(`> ${name} 正在进行中，请不要重复执行`, 'warning')
+            reject(`${name} 正在进行中，请不要重复执行`)
+          }
+        }, uploadConfig.delay || 0)
+      } else {
+        consoler('> 未检测到上传指令，不执行此次上传', 'error')
+        sftp.end()
+        reject('未检测到上传指令，不执行此次上传')
+      }
+    })
   }
 
-  function put() {
-    isFirst = false
-    // 自动上传到FTP服务器
-    if (!options.dir) {
-      pointLog('> 无法上传SFTP,请检查参数', 'error')
-      return
-    }
+  /**
+   * 开始上传逻辑
+   * @return       {*}
+   */
+  async function startUpload(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      isFirst = false
+      // 自动上传到FTP服务器
+      if (!uploadConfig.pkgDir) {
+        consoler('> 无法上传 SSH ，请检查参数 dir', 'error')
+        reject('无法上传 SSH ，请检查参数 dir')
+      } else {
+        timer = Date.now()
 
-    timer = Date.now()
+        consoler(`\n$@scat1995/deployer`)
 
-    pointLog('\n$scat-sftp-uploader')
-
-    sftp
-      .connect(config)
-      .then(() => {
-        // 连接服务器
-        pointLog('\n> 连接成功', 'success')
-        pullDir()
-      })
-      .catch((err: string) => {
-        exError('> sftp连接失败' + err)
-      })
-  }
-
-  function pullDir() {
-    sftp
-      .list(options.url)
-      .then((files: any[]) => {
-        // 过滤掉不需要删除的文件
-        if (options.deleteFilter && typeof options.deleteFilter === 'function') {
-          files = files.filter((x: any) => options.deleteFilter(x))
-        }
-        deleteServerFile(files).then(() => {
-          globLocalFile()
-        })
-      })
-      .catch(() => {
-        pointLog('  - 找不到文件夹：' + options.url + '，尝试创建文件夹')
         sftp
-          .mkdir(options.url, true)
-          .then((res: any) => {
-            pointLog(`  - ${options.url}文件夹创建成功`)
-            pullDir()
+          .connect(sshConfig)
+          .then(() => {
+            // 连接服务器
+            consoler('\n> 连接成功', 'success')
+            remakeDirAndExecUpload().then(() => {
+              resolve()
+            })
           })
-          .catch((_: string) => {
-            exError('  - 文件夹创建失败 ' + _)
+          .catch((err: string) => {
+            exError('> SSH 连接失败' + err)
+            reject(err)
           })
-      })
+      }
+    })
   }
 
-  async function deleteServerFile(list: any[]) {
+  /**
+   * 删除服务器上目录并创建同名新目录
+   * @return       {*}
+   */
+  async function remakeDirAndExecUpload(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      sftp
+        .list(uploadConfig.sshPath)
+        .then((files: any[]) => {
+          // 过滤掉不需要删除的文件
+          if (uploadConfig.deleteFilter && typeof uploadConfig.deleteFilter === 'function') {
+            files = files.filter((x: any) => uploadConfig.deleteFilter(x))
+          }
+          removeRemoteFiles(files).then(() => {
+            getAllFilepathsInLocalDir().then((paths) => {
+              let count = 0
+              if (paths.length === 0) {
+                resolve()
+              } else {
+                coreUpload(paths).then(() => {
+                  if (count < paths.length - 1) {
+                    count++
+                  } else {
+                    resolve()
+                  }
+                })
+              }
+            })
+          })
+        })
+        .catch(() => {
+          consoler('  - 找不到文件夹：' + uploadConfig.sshPath + '，尝试创建文件夹')
+          sftp
+            .mkdir(uploadConfig.sshPath, true)
+            .then((res: any) => {
+              consoler(`  - ${uploadConfig.sshPath}文件夹创建成功`)
+              remakeDirAndExecUpload()
+            })
+            .catch((err: string) => {
+              exError('  - 文件夹创建失败 ' + err)
+              reject(err)
+            })
+        })
+    })
+  }
+
+  /**
+   * 删除服务器上文件(夹)
+   * @param        {any} list
+   * @return       {*}
+   */
+  async function removeRemoteFiles(list: any[]): Promise<void> {
     const total = list.length
     if (total > 0) {
       // 删除服务器上文件(夹)
-      const speed = progressBar('删除中') // 上传进度条
+      const processing = progbar('删除中') // 上传进度条
       let i = 0
       for (const fileInfo of list) {
         i++
-        speed({ completed: i, total })
-        const path = url + fileInfo.name
+        processing.update({ completed: i, total })
+        const filepath = path.join(uploadConfig.sshPath, fileInfo.name).replace(/\\/g, '/').replace(/\/+/g, '/')
         if (fileInfo.type === '-') {
-          await sftp.delete(path)
+          await sftp.delete(filepath)
         } else {
-          await sftp.rmdir(path, true)
+          await sftp.rmdir(filepath, true)
         }
       }
-      pointLog(`\n  - 删除成功`, 'success')
+
+      consoler(`\n  - 删除成功`, 'success')
+      processing.destory()
     }
 
-    return new Promise<void>((resovle) => {
+    return new Promise((resovle) => {
       resovle()
     })
   }
 
-  function globLocalFile() {
-    let localDir = `${options.dir}${options.dir.endsWith('/') ? '**' : '/**'}`
-    // 获取本地路径所有文件
-    glob(localDir, (err: any, files: string[]) => {
-      // 本地目录下所有文件(夹)的路径
-      files.splice(0, 1) // 删除路径../dist/
-      if (options.uploadFilter && typeof options.uploadFilter === 'function') {
-        files = files.filter((x: any) => options.uploadFilter(x))
-      }
-
-      uploadFileToSftp(files)
+  /**
+   * 获取本地目录下所有文件(夹)的路径
+   * @return       {*}
+   */
+  async function getAllFilepathsInLocalDir(): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+      const localDir = `${uploadConfig.pkgDir}${uploadConfig.pkgDir.endsWith('/') ? '**' : '/**'}`.replace(/\\/g, '/').replace(/\/+/g, '/')
+      // 获取本地路径所有文件
+      glob(localDir, (err: any, paths: string[]) => {
+        // 本地目录下所有文件(夹)的路径
+        // files.splice(0, 1) // 删除路径../dist/
+        if (uploadConfig.uploadFilter && typeof uploadConfig.uploadFilter === 'function') {
+          paths = paths.filter((x: any) => uploadConfig.uploadFilter(x))
+        }
+        if (typeof paths === 'object' && paths instanceof Array && paths.length) {
+          resolve(paths)
+        } else {
+          reject('本地目录下未找到文件或文件夹')
+        }
+      })
     })
   }
 
-  async function uploadFileToSftp(files: string[]) {
+  /**
+   * 上传文件（核心逻辑）
+   * @param        {string} files
+   * @return       {*}
+   */
+  async function coreUpload(files: string[]): Promise<void> {
     // 传输文件到服务器
-    const speed = progressBar('上传中') // 上传进度条
+
     const total: number = files.length
-    let i = 0
-    for (const localSrc of files) {
-      i++
-      const _localSrc = path.resolve(localSrc) // 获取完整路径
-      const targetSrc = _localSrc.replace(options.dir, options.url).replace(/\\/g, '/')
-      speed({ completed: i, total })
-      if (fs.lstatSync(_localSrc).isDirectory()) {
-        // 是文件夹
-        await sftp.mkdir(targetSrc)
-      } else {
-        await sftp.put(_localSrc, targetSrc)
+    if (total > 0) {
+      const processing = progbar('上传中') // 上传进度条
+      let i = 0
+      for (let localSrc of files) {
+        i++
+        localSrc = path.resolve(localSrc).replace(/\\/g, '/').replace(/\/+/g, '/') // 获取完整路径
+        let targetSrc = localSrc.replace(uploadConfig.pkgDir, uploadConfig.sshPath)
+        targetSrc = targetSrc.replace(/\\/g, '/').replace(/\/+/g, '/')
+        processing.update({ completed: i, total })
+        try {
+          if (fs.lstatSync(localSrc).isDirectory()) {
+            // 是文件夹
+            await sftp.mkdir(targetSrc)
+          } else {
+            await sftp.put(localSrc, targetSrc)
+          }
+        } catch (_) {
+          // 上传失败
+        }
       }
+      consoler(`\n  - 上传成功\n`, 'success')
+      processing.destory()
+      consoler(`  - 耗时: ${Date.now() - timer}ms`)
+      if (uploadConfig.previewPath) {
+        consoler(`  - 预览地址: ${uploadConfig.previewPath} \n\n`, 'link')
+      }
+    } else {
+      consoler(`\n  - 上传失败，没有文件需要上传\n`, 'error')
     }
-    pointLog(`\n  - 已上传${files.length}个文件`, 'success')
-    pointLog(`  - 耗时: ${Date.now() - timer}ms`)
-    if (options.previewPath) {
-      pointLog(`  - 预览地址: ${options.previewPath} \n\n`, 'link')
-    }
+
     sftp.end()
+    return new Promise((resovle) => {
+      resovle()
+    })
   }
 
   function exError(err: string) {
     sftp.end()
-    pointLog(`  - sftpError:${err}`, 'error')
+    consoler(`  - ${name} Error:${err}`, 'error')
   }
 
   return {
     name,
     // @ts-ignore
-    put,
+    execute: startUpload,
     buildEnd() {
       // 判断 Vue CLI 的多编译器模式
       if (process.env.VUE_CLI_MODERN_MODE && !process.env.VUE_CLI_MODERN_BUILD) {
         // !!! 跳过 !!! Modern Mode 第一轮 (Legacy Bundle)：生成兼容旧浏览器的 JS 文件
-        return
+        return Promise.reject()
       }
-      isPut()
+
+      return endHandler()
     }
   }
 }
 
 const Deployer = {
-  ...createUnplugin(sftpUploader),
-  put: (options: DeployerInputOptions) => (sftpUploader(options) as any).put()
-} as Omit<UnpluginInstance<DeployerInputOptions, boolean>, 'vite'> & { vite: UnpluginInstance<DeployerInputOptions, boolean>['rollup'] }
+  ...createUnplugin(unpluginFactory as any),
+  exec: (options) => unpluginFactory(options).execute()
+} as Pick<UnpluginInstance<WebDeployer.InputOptions, boolean>, 'rollup' | 'webpack'> & {
+  vite: UnpluginInstance<WebDeployer.InputOptions, boolean>['rollup']
+  exec: WebDeployer.Exec
+}
 
 export default Deployer
 export const RollupPluginDeployer = Deployer.rollup
 export const VitePluginDeployer = Deployer.vite
 export class DeployerWebpackPlugin {
   private instance: WebpackPluginInstance
-  constructor(options?: DeployerInputOptions) {
+  constructor(options?: WebDeployer.InputOptions) {
     this.instance = Deployer.webpack(options)
   }
   apply(compiler: any): void {

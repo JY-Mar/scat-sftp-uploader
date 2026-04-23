@@ -11,29 +11,25 @@
     "url": "https://github.com/JY-Mar/scat-web-deployer.git"
   },
   "keywords": [
-    "vite",
-    "vite-plugin",
-    "rollup",
-    "rollup-plugin",
-    "webpack",
-    "webpack-plugin",
-    "deployer",
-    "scat",
+    "sftp-uploader",
+    "web-deployer",
     "scientificat1995"
   ],
-  "main": "dist/index.cjs.js",
-  "module": "dist/index.esm.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     "types": "./dist/index.d.ts",
-    "import": "./dist/index.esm.js",
-    "require": "./dist/index.cjs.js"
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "rimraf dist && tsup && npm link",
+    "build": "rimraf dist && tsup",
+    "link-g": "npm link",
+    "unlink-g": "npm unlink @scat1995/deployer -g",
     "reinstall": "npm install",
     "publish-npmjs": "npm publish --access public"
   },
@@ -41,7 +37,8 @@
     "chalk": "4.1.2",
     "glob": "^8.1.0",
     "single-line-log": "^1.1.2",
-    "ssh2-sftp-client": "^9.0.6"
+    "ssh2-sftp-client": "^9.0.6",
+    "unplugin": "^3.0.0"
   },
   "peerDependencies": {
     "rollup": ">=2.0.0",
@@ -65,8 +62,8 @@
     "@types/single-line-log": "^1.1.2",
     "@types/ssh2-sftp-client": "^9.0.6",
     "rimraf": "^6.1.3",
+    "terser": "^5.46.1",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.2",
-    "unplugin": "^3.0.0"
+    "typescript": "^5.9.2"
   }
 }

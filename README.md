@@ -1,23 +1,23 @@
-# scat-sftp-uploader
+# @scat1995/deployer
 
-> `scat-sftp-uploader` 是一款基于 `ssh2-sftp-client` 封装的文件上传插件，支持 `webpack` 及 `vite` ，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`或`vite`插件或`单独`使用，支持自动创建上传目录。
+> `@scat1995/deployer` 是一款基于 `ssh2-sftp-client` 封装的文件上传插件，支持 `webpack`、 `vite` 及 `rollup`，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`或`vite`插件或`单独`使用，支持自动创建上传目录。
 
 ## Install
 
 ![NPM](https://nodei.co/npm/@scat1995/deployer.png)
 
 ```sh
-yarn add @scat1995/deployer
-npm i @scat1995/deployer
+yarn add @scat1995/deployer --save-dev
+npm install @scat1995/deployer --save-dev
 ```
 
 ## 配置
 
 ```javascript
 const path = require('path')
-const SftpUploader = require('@scat1995/deployer')
+const DeployerWebpackPlugin = require('@scat1995/deployer')
 
-const sftp = SftpUploader({
+const sftp = DeployerWebpackPlugin({
   dir: path.join(__dirname, 'dist/'), // 需要上传文件的目录
   url: '******', // 上传到的目录
   host: '*****', // sftp地址
@@ -42,11 +42,13 @@ const sftp = SftpUploader({
 ```javascript
 // webpack中使用
 //vue.config.js
+const DeployerWebpackPlugin = require('@scat1995/deployer')
+
 module.exports = {
   configureWebpack: config => {
     return {
       plugins: [
-        SftpUploader({ ... })
+        new DeployerWebpackPlugin({ ... })
       ]
     }
   }
@@ -54,9 +56,11 @@ module.exports = {
 
 // vite中使用
 //vite.config.js
+import VitePluginDeployer from '@scat1995/deployer'
+
 export default defineConfig({
   plugins: [
-    SftpUploader({ ... })
+    VitePluginDeployer({ ... })
   ]
 })
 
@@ -79,7 +83,8 @@ export default defineConfig({
 ```javascript
 // 1、在项目中创建uploader.js
 // 2、配置和webpack插件模式相同
-SftpUploader({ ... }).put()
+const Deployer = require('@scat1995/deployer')
+Deployer.exec({ ... })
 // 然后在项目根目录终端下运行如下命令
 node uploader.js
 ```
