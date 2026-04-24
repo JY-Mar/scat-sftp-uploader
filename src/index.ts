@@ -1,3 +1,4 @@
+import os from 'os'
 import fs from 'fs'
 import path from 'path'
 import glob from 'glob'
@@ -57,19 +58,20 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
             // 开始上传逻辑
             startUpload()
               .then(() => {
+                sftp.end()
                 resolve()
               })
               .catch((err) => {
+                exError(`开始上传发生错误：${err}`)
                 reject(err)
               })
           } else {
-            consoler(`> ${name} 正在进行中，请不要重复执行`, 'warning')
-            reject(`${name} 正在进行中，请不要重复执行`)
+            exError(`${name} 正在进行中，不可重复执行`)
+            reject(`${name} 正在进行中，不可重复执行`)
           }
         }, uploadConfig.delay || 0)
       } else {
-        consoler('> 未检测到上传指令，不执行此次上传', 'error')
-        sftp.end()
+        exError('未检测到上传指令，不执行此次上传')
         reject('未检测到上传指令，不执行此次上传')
       }
     })
@@ -84,19 +86,20 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
       isFirst = false
       // 自动上传到FTP服务器
       if (!uploadConfig.pkgDir) {
-        consoler('> 无法上传 SSH ，请检查参数 dir', 'error')
+        exError('> 无法上传 SSH ，请检查参数 dir')
         reject('无法上传 SSH ，请检查参数 dir')
       } else {
         timer = Date.now()
 
-        consoler(`\n$@scat1995/deployer`)
+        consoler(`> SSH 开始连接`)
 
         sftp
           .connect(sshConfig)
           .then(() => {
             // 连接服务器
-            consoler('\n> 连接成功', 'success')
+            consoler('> SSH 连接成功', 'success')
             remakeDirAndExecUpload().then(() => {
+              sftp.end()
               resolve()
             })
           })
@@ -123,31 +126,26 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
           }
           removeRemoteFiles(files).then(() => {
             getAllFilepathsInLocalDir().then((paths) => {
-              let count = 0
               if (paths.length === 0) {
                 resolve()
               } else {
                 coreUpload(paths).then(() => {
-                  if (count < paths.length - 1) {
-                    count++
-                  } else {
-                    resolve()
-                  }
+                  resolve()
                 })
               }
             })
           })
         })
         .catch(() => {
-          consoler('  - 找不到文件夹：' + uploadConfig.sshPath + '，尝试创建文件夹')
+          consoler('- 找不到文件夹：' + uploadConfig.sshPath + '，尝试创建文件夹')
           sftp
             .mkdir(uploadConfig.sshPath, true)
             .then((res: any) => {
-              consoler(`  - ${uploadConfig.sshPath}文件夹创建成功`)
+              consoler(`- ${uploadConfig.sshPath}文件夹创建成功`)
               remakeDirAndExecUpload()
             })
             .catch((err: string) => {
-              exError('  - 文件夹创建失败 ' + err)
+              exError('- 文件夹创建失败 ' + err)
               reject(err)
             })
         })
@@ -165,19 +163,31 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
       // 删除服务器上文件(夹)
       const processing = progbar('删除中') // 上传进度条
       let i = 0
+      const errors: string[] = []
       for (const fileInfo of list) {
         i++
         processing.update({ completed: i, total })
         const filepath = path.join(uploadConfig.sshPath, fileInfo.name).replace(/\\/g, '/').replace(/\/+/g, '/')
-        if (fileInfo.type === '-') {
-          await sftp.delete(filepath)
-        } else {
-          await sftp.rmdir(filepath, true)
+        try {
+          if (fileInfo.type === '-') {
+            await sftp.delete(filepath)
+          } else {
+            await sftp.rmdir(filepath, true)
+          }
+        } catch (err) {
+          errors.push(`${fileInfo.type === '-' ? '文件' : '文件夹'} "${filepath}"：${err}`)
         }
       }
 
-      consoler(`\n  - 删除成功`, 'success')
-      processing.destory()
+
+      if (!errors.length) {
+        processing.stop('删除成功', 'success')
+      } else if (errors.length === total) {
+        processing.stop('删除失败', 'error')
+      } else {
+        processing.stop('删除完成', 'warning')
+        consoler(`  共 ${errors.length} / ${total} 个失败：${errors.map((v) => `${os.EOL}        ${v}`).join('')}`, 'error')
+      }
     }
 
     return new Promise((resovle) => {
@@ -237,17 +247,21 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
           // 上传失败
         }
       }
-      consoler(`\n  - 上传成功\n`, 'success')
-      processing.destory()
-      consoler(`  - 耗时: ${Date.now() - timer}ms`)
+      processing.stop('上传成功', 'success')
+
+      const cost = Date.now() - timer
+      if (cost > 1000) {
+        consoler(`- 耗时: ${Math.ceil(cost * 100 / 1000) / 100}s`)
+      } else {
+        consoler(`- 耗时: ${cost}ms`)
+      }
       if (uploadConfig.previewPath) {
-        consoler(`  - 预览地址: ${uploadConfig.previewPath} \n\n`, 'link')
+        consoler(`- 预览地址: ${uploadConfig.previewPath}`, 'link')
       }
     } else {
-      consoler(`\n  - 上传失败，没有文件需要上传\n`, 'error')
+      consoler(`- 上传失败，没有文件需要上传`, 'error')
     }
 
-    sftp.end()
     return new Promise((resovle) => {
       resovle()
     })
@@ -255,21 +269,25 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
 
   function exError(err: string) {
     sftp.end()
-    consoler(`  - ${name} Error:${err}`, 'error')
+    consoler(`- ${name} Error:${err}`, 'error')
   }
 
   return {
     name,
     // @ts-ignore
     execute: startUpload,
-    buildEnd() {
+    async writeBundle() {
       // 判断 Vue CLI 的多编译器模式
       if (process.env.VUE_CLI_MODERN_MODE && !process.env.VUE_CLI_MODERN_BUILD) {
         // !!! 跳过 !!! Modern Mode 第一轮 (Legacy Bundle)：生成兼容旧浏览器的 JS 文件
-        return Promise.reject()
+        return
       }
-
-      return endHandler()
+      await new Promise(resolve => setTimeout(resolve, 737));
+      try {
+        await endHandler()
+      } catch (err) {
+        exError(`- SSH 上传发生错误：${err}`)
+      }
     }
   }
 }
