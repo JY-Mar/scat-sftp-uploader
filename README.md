@@ -1,6 +1,6 @@
 # @scat1995/deployer
 
-> `@scat1995/deployer` 是一款基于 `ssh2-sftp-client` 封装的文件上传插件，支持 `webpack`、 `vite` 及 `rollup`，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`或`vite`插件或`单独`使用，支持自动创建上传目录。
+> `@scat1995/deployer` 是一款基于 `ssh2-sftp-client` 封装的文件上传插件，支持 `webpack`、 `vite` 及 `rollup`，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`、 `vite` 或 `rollup` 插件或`单独`使用，支持自动创建上传目录。
 
 ## Install
 
@@ -83,7 +83,7 @@ export default defineConfig({
 ```javascript
 // 1、在项目中创建uploader.js
 // 2、配置和webpack插件模式相同
-const Deployer = require('@scat1995/deployer')
+const Deployer = require('@scat1995/deployer').default
 Deployer.exec({ ... })
 // 然后在项目根目录终端下运行如下命令
 node uploader.js
