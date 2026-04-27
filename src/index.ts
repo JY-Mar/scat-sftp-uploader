@@ -25,6 +25,13 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
   }
   if (uploadConfig?.pkgDir) {
     uploadConfig.pkgDir = uploadConfig.pkgDir.replace(/\\/g, '/').replace(/\/+/g, '/')
+    if (/^[a-z]:\//.test(uploadConfig.pkgDir)) {
+      // 如果是 Windows 路径，将第一个字母（盘符）大写
+      uploadConfig.pkgDir = uploadConfig.pkgDir.charAt(0).toUpperCase() + uploadConfig.pkgDir.slice(1)
+    }
+    if (!uploadConfig.pkgDir.endsWith('/')) {
+      uploadConfig.pkgDir = uploadConfig.pkgDir + '/' // 如果本地目录没有以 / 结尾，自动加上，以与 sshPath 保持一致
+    }
   }
   if (uploadConfig?.sshPath) {
     uploadConfig.sshPath = uploadConfig.sshPath.replace(/\\/g, '/').replace(/\/+/g, '/')
@@ -62,16 +69,19 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
                 resolve()
               })
               .catch((err) => {
-                exError(`开始上传发生错误：${err}`)
+                sftp.end()
+                consoler.error(`> 开始上传发生错误：${err}`)
                 reject(err)
               })
           } else {
-            exError(`${name} 正在进行中，不可重复执行`)
-            reject(`${name} 正在进行中，不可重复执行`)
+            sftp.end()
+            consoler.error(`> 正在进行中，不可重复执行`)
+            reject(`正在进行中，不可重复执行`)
           }
         }, uploadConfig.delay || 0)
       } else {
-        exError('未检测到上传指令，不执行此次上传')
+        sftp.end()
+        consoler.error('> 未检测到上传指令，不执行此次上传')
         reject('未检测到上传指令，不执行此次上传')
       }
     })
@@ -86,25 +96,32 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
       isFirst = false
       // 自动上传到FTP服务器
       if (!uploadConfig.pkgDir) {
-        exError('> 无法上传 SSH ，请检查参数 dir')
-        reject('无法上传 SSH ，请检查参数 dir')
+        sftp.end()
+        consoler.error('> SSH 无法上传，请检查参数 dir')
+        reject('SSH 无法上传，请检查参数 dir')
       } else {
         timer = Date.now()
 
-        consoler(`> SSH 开始连接`)
+        consoler.info(`> SSH 开始连接`)
 
         sftp
           .connect(sshConfig)
           .then(() => {
             // 连接服务器
-            consoler('> SSH 连接成功', 'success')
-            remakeDirAndExecUpload().then(() => {
-              sftp.end()
-              resolve()
-            })
+            consoler.success('> SSH 连接成功')
+            remakeDirAndExecUpload()
+              .then(() => {
+                sftp.end()
+                resolve()
+              })
+              .catch((e) => {
+                sftp.end()
+                reject(e)
+              })
           })
           .catch((err: string) => {
-            exError('> SSH 连接失败' + err)
+            sftp.end()
+            consoler.error(`> SSH 连接失败：` + err)
             reject(err)
           })
       }
@@ -117,43 +134,53 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
    */
   async function remakeDirAndExecUpload(): Promise<void> {
     return new Promise((resolve, reject) => {
-      sftp
-        .list(uploadConfig.sshPath)
-        .then((files: any[]) => {
-          // 过滤掉不需要删除的文件
-          if (uploadConfig.deleteFilter && typeof uploadConfig.deleteFilter === 'function') {
-            files = files.filter((x: any) => uploadConfig.deleteFilter(x))
-          }
-          removeRemoteFiles(files).then(() => {
-            getAllFilepathsInLocalDir().then((paths) => {
-              if (paths.length === 0) {
-                resolve()
-              } else {
-                coreUpload(paths).then(() => {
-                  resolve()
-                })
-              }
+      const recursive = (callback: (...o: any[]) => any): void => {
+        sftp
+          .list(uploadConfig.sshPath)
+          .then((files: any[]) => {
+            // 过滤掉不需要删除的文件
+            if (uploadConfig.deleteFilter && typeof uploadConfig.deleteFilter === 'function') {
+              files = files.filter((x: any) => uploadConfig.deleteFilter(x))
+            }
+            removeRemoteFiles(files).then(() => {
+              globFiles(uploadConfig.pkgDir).then((paths) => {
+                const _paths = (paths || []).map((v) =>
+                  String(v || '')
+                    .replace(/\\/g, '/')
+                    .replace(/\/+/g, '/')
+                )
+                if (_paths.length === 0) {
+                  consoler.warning(`- 本地目录"${uploadConfig.pkgDir}"为空，无需上传`)
+                  reject(`本地目录"${uploadConfig.pkgDir}"为空，无需上传`)
+                } else {
+                  coreUpload(_paths).then(() => {
+                    resolve()
+                  })
+                }
+              })
             })
           })
-        })
-        .catch(() => {
-          consoler('- 找不到文件夹：' + uploadConfig.sshPath + '，尝试创建文件夹')
-          sftp
-            .mkdir(uploadConfig.sshPath, true)
-            .then((res: any) => {
-              consoler(`- ${uploadConfig.sshPath}文件夹创建成功`)
-              remakeDirAndExecUpload()
-            })
-            .catch((err: string) => {
-              exError('- 文件夹创建失败 ' + err)
-              reject(err)
-            })
-        })
+          .catch(() => {
+            consoler.info(`- 远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"未找到，尝试创建目录`)
+            sftp
+              .mkdir(uploadConfig.sshPath, true)
+              .then((res: any) => {
+                consoler.info(`- 远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"创建成功`)
+                recursive(callback)
+              })
+              .catch((err: string) => {
+                consoler.error(`- Error：远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"创建失败：${err}`)
+                reject(`- Error：远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"创建失败：${err}`)
+              })
+          })
+      }
+      recursive(recursive)
     })
   }
 
   /**
    * 删除服务器上文件(夹)
+   * @description  resolve only
    * @param        {any} list
    * @return       {*}
    */
@@ -175,54 +202,57 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
             await sftp.rmdir(filepath, true)
           }
         } catch (err) {
-          errors.push(`${fileInfo.type === '-' ? '文件' : '文件夹'} "${filepath}"：${err}`)
+          errors.push(`${fileInfo.type === '-' ? '文件' : '目录'} "${filepath}"：${err}`)
         }
       }
 
       if (!errors.length) {
-        processing.stop('删除成功', 'success')
+        processing.stop('删除成功', 'success', true)
       } else if (errors.length === total) {
         processing.stop('删除失败', 'error')
       } else {
         processing.stop('删除完成', 'warning')
-        consoler(`  共 ${errors.length} / ${total} 个失败：${errors.map((v) => `${os.EOL}        ${v}`).join('')}`, 'error')
+        consoler.info(`  共 ${errors.length} / ${total} 个失败：${errors.map((v) => `${os.EOL}        ${v}`).join('')}`)
       }
     }
 
-    return new Promise((resovle) => {
-      resovle()
-    })
+    return Promise.resolve()
   }
 
   /**
    * 获取本地目录下所有文件(夹)的路径
    * @return       {*}
    */
-  async function getAllFilepathsInLocalDir(): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      const localDir = `${uploadConfig.pkgDir}${uploadConfig.pkgDir.endsWith('/') ? '**' : '/**'}`.replace(/\\/g, '/').replace(/\/+/g, '/')
+  async function globFiles(dir: string, ignoreBase: boolean = false): Promise<string[]> {
+    return new Promise((resolve) => {
+      if (typeof dir !== 'string' || dir === '') {
+        consoler.error(`- 本地目录路径参数不能为空`)
+        resolve([])
+        return
+      }
+      const pattern = `${dir}${dir.endsWith('/') ? '**' : '/**'}`.replace(/\\/g, '/').replace(/\/+/g, '/')
       // 获取本地路径所有文件
-      glob(localDir)
+      glob(pattern, { ignore: ignoreBase ? ['.'] : undefined })
         .then((paths: string[]) => {
           // 本地目录下所有文件(夹)的路径
-          // files.splice(0, 1) // 删除路径../dist/
           if (uploadConfig.uploadFilter && typeof uploadConfig.uploadFilter === 'function') {
             paths = paths.filter((x: any) => uploadConfig.uploadFilter(x))
           }
           if (typeof paths === 'object' && paths instanceof Array && paths.length) {
             resolve(paths)
           } else {
-            reject('本地目录下未找到文件或文件夹')
+            resolve([])
           }
         })
-        .catch((err: any) => {
-          reject(`获取本地路径文件出错：${err}`)
+        .catch(() => {
+          resolve([])
         })
     })
   }
 
   /**
    * 上传文件（核心逻辑）
+   * @description  resolve only
    * @param        {string} files
    * @return       {*}
    */
@@ -233,15 +263,33 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
     if (total > 0) {
       const processing = progbar('上传中') // 上传进度条
       let i = 0
+      processing.update({ completed: i, total })
+
       for (let localSrc of files) {
         i++
         localSrc = path.resolve(localSrc).replace(/\\/g, '/').replace(/\/+/g, '/') // 获取完整路径
+        if (/^[a-z]:\//.test(localSrc)) {
+          // 与 uploadConfig.pkgDir 路径格式一致，将第一个字母（盘符）大写
+          localSrc = localSrc.charAt(0).toUpperCase() + localSrc.slice(1)
+        }
+        if (!localSrc.endsWith('/')) {
+          localSrc = localSrc + '/'
+        }
+        if (!localSrc.startsWith(uploadConfig.pkgDir)) {
+          continue
+        }
+        if (total === 1) {
+          const filepaths = await globFiles(localSrc, true)
+          if (!filepaths.length) {
+            continue
+          }
+        }
         let targetSrc = localSrc.replace(uploadConfig.pkgDir, uploadConfig.sshPath)
         targetSrc = targetSrc.replace(/\\/g, '/').replace(/\/+/g, '/')
         processing.update({ completed: i, total })
         try {
           if (fs.lstatSync(localSrc).isDirectory()) {
-            // 是文件夹
+            // 是目录
             await sftp.mkdir(targetSrc, true)
           } else {
             await sftp.put(localSrc, targetSrc)
@@ -254,25 +302,18 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
 
       const cost = Date.now() - timer
       if (cost > 1000) {
-        consoler(`- 耗时: ${Math.ceil((cost * 100) / 1000) / 100}s`)
+        consoler.info(`- 上传耗时: ${Math.ceil((cost * 100) / 1000) / 100}s`)
       } else {
-        consoler(`- 耗时: ${cost}ms`)
+        consoler.info(`- 上传耗时: ${cost}ms`)
       }
       if (uploadConfig.previewPath) {
-        consoler(`- 预览地址: ${uploadConfig.previewPath}`, 'link')
+        consoler.link(`- 预览地址: ${uploadConfig.previewPath}`)
       }
     } else {
-      consoler(`- 上传失败，没有文件需要上传`, 'error')
+      consoler.error(`- 上传失败，没有文件需要上传`)
     }
 
-    return new Promise((resovle) => {
-      resovle()
-    })
-  }
-
-  function exError(err: string) {
-    sftp.end()
-    consoler(`- ${name} Error:${err}`, 'error')
+    return Promise.resolve()
   }
 
   return {
@@ -289,7 +330,8 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
       try {
         await endHandler()
       } catch (err) {
-        exError(`- SSH 上传发生错误：${err}`)
+        sftp.end()
+        consoler.error(`- ${name} Error：SSH 上传发生错误：${err}`)
       }
     }
   }
@@ -312,4 +354,4 @@ export class DeployerWebpackPlugin {
     this.instance.apply(compiler)
   }
 }
-export { default as WebDeployer } from './type'
+export type DeployerInputOptions = WebDeployer.InputOptions

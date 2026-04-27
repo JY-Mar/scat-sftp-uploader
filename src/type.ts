@@ -23,7 +23,7 @@ namespace WebDeployer {
        * Stop updating progress bar processing
        * @param text Text to display before stopping
        */
-      stop(text?: string, type?: Consoler.MsgType, keepOld?: boolean): void
+      stop(text?: string, type?: Consoler.MsgInputType, keepOld?: boolean): void
     }
     /**
      * Progress bar update options
@@ -120,9 +120,23 @@ namespace WebDeployer {
    */
   export namespace Consoler {
     /**
+     * All Console output types
+     */
+    export const MSG_TYPES = ['success', 'warning', 'error', 'link', 'info', 'tip', 'emphasize', 'debug'] as const
+    /**
      * Console output type
      */
-    export type MsgType = 'success' | 'warning' | 'error' | 'link' | 'info' | 'tip' | 'emphasize' | (string & Record<never, never>)
+    export type MsgType = typeof MSG_TYPES[number]
+    /**
+     * Console output type
+     */
+    export type MsgInputType = MsgType | string & Record<never, never>
+    /**
+     * Console instance
+     */
+    export type Instance = {
+      [K in MsgType]: (text: string) => void
+    }
   }
 
   /**
