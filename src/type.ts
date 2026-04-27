@@ -1,4 +1,9 @@
+import type { UnpluginInstance, UnpluginOptions } from 'unplugin'
+
 namespace WebDeployer {
+  /**
+   * Progress bar
+   */
   export namespace Progbar {
     /**
      * Progress bar instance
@@ -28,6 +33,7 @@ namespace WebDeployer {
       total: number
     }
   }
+
   /**
    * Input Deployer Options
    */
@@ -75,14 +81,14 @@ namespace WebDeployer {
      * File filter for uploading
      * @description Filter files to be uploaded. Returning `false` will skip the upload for that file. (Optional)
      */
-    uploadFilter: Function
+    uploadFilter?: Function
     /**
      * 删除文件过滤器（可选）
      *
      * File filter for the files that do not need to be deleted
      * @description Filter files to be deleted. Returning `false` will prevent the file from being deleted. (Optional)
      */
-    deleteFilter: Function
+    deleteFilter?: Function
     /**
      * 延迟上传时间（毫秒）
      *
@@ -100,18 +106,14 @@ namespace WebDeployer {
   }
 
   /**
-   * Internal Executable Function
+   * Options for create unplugin
    */
-  export interface InternalExecute {
-    (): Promise<void>
-  }
+  export type OptionsForCreateUnplugin = UnpluginOptions & { execute: () => Promise<void> }
 
   /**
    * External Executable Function
    */
-  export interface Exec {
-    (Options: InputOptions): any
-  }
+  export type Exec = (Options: InputOptions) => any
 
   /**
    * Console
@@ -121,6 +123,14 @@ namespace WebDeployer {
      * Console output type
      */
     export type MsgType = 'success' | 'warning' | 'error' | 'link' | 'info' | 'tip' | 'emphasize' | (string & Record<never, never>)
+  }
+
+  /**
+   * Instance of WebDeployer
+   */
+  export type Instance = Pick<UnpluginInstance<InputOptions, boolean>, 'rollup' | 'webpack'> & {
+    vite: UnpluginInstance<InputOptions, boolean>['rollup']
+    exec: Exec
   }
 }
 

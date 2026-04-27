@@ -1,15 +1,15 @@
 import os from 'os'
 import fs from 'fs'
 import path from 'path'
-import glob from 'glob'
+import { glob } from 'glob'
 import SftpClient from 'ssh2-sftp-client'
 import { consoler, progbar } from './utils'
-import { type UnpluginInstance, type UnpluginOptions, type WebpackPluginInstance, createUnplugin } from 'unplugin'
+import { type WebpackPluginInstance, createUnplugin } from 'unplugin'
 import WebDeployer from './type'
 
 const name = 'Deployer'
 
-function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & { execute: WebDeployer.InternalExecute } {
+function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.OptionsForCreateUnplugin {
   const sftp = new SftpClient()
   let trim: any = null,
     isFirst: boolean = true, // 防止多次调用
@@ -38,7 +38,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
    */
   const sshConfig: SftpClient.ConnectOptions = {
     host: options.host, // 服务器地址
-    port: Number(options.port || 22),
+    port: Number(options.port ?? 22),
     username: options.username,
     password: options.password
   }
@@ -179,7 +179,6 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
         }
       }
 
-
       if (!errors.length) {
         processing.stop('删除成功', 'success')
       } else if (errors.length === total) {
@@ -203,18 +202,22 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
     return new Promise((resolve, reject) => {
       const localDir = `${uploadConfig.pkgDir}${uploadConfig.pkgDir.endsWith('/') ? '**' : '/**'}`.replace(/\\/g, '/').replace(/\/+/g, '/')
       // 获取本地路径所有文件
-      glob(localDir, (err: any, paths: string[]) => {
-        // 本地目录下所有文件(夹)的路径
-        // files.splice(0, 1) // 删除路径../dist/
-        if (uploadConfig.uploadFilter && typeof uploadConfig.uploadFilter === 'function') {
-          paths = paths.filter((x: any) => uploadConfig.uploadFilter(x))
-        }
-        if (typeof paths === 'object' && paths instanceof Array && paths.length) {
-          resolve(paths)
-        } else {
-          reject('本地目录下未找到文件或文件夹')
-        }
-      })
+      glob(localDir)
+        .then((paths: string[]) => {
+          // 本地目录下所有文件(夹)的路径
+          // files.splice(0, 1) // 删除路径../dist/
+          if (uploadConfig.uploadFilter && typeof uploadConfig.uploadFilter === 'function') {
+            paths = paths.filter((x: any) => uploadConfig.uploadFilter(x))
+          }
+          if (typeof paths === 'object' && paths instanceof Array && paths.length) {
+            resolve(paths)
+          } else {
+            reject('本地目录下未找到文件或文件夹')
+          }
+        })
+        .catch((err: any) => {
+          reject(`获取本地路径文件出错：${err}`)
+        })
     })
   }
 
@@ -239,7 +242,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
         try {
           if (fs.lstatSync(localSrc).isDirectory()) {
             // 是文件夹
-            await sftp.mkdir(targetSrc)
+            await sftp.mkdir(targetSrc, true)
           } else {
             await sftp.put(localSrc, targetSrc)
           }
@@ -251,7 +254,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
 
       const cost = Date.now() - timer
       if (cost > 1000) {
-        consoler(`- 耗时: ${Math.ceil(cost * 100 / 1000) / 100}s`)
+        consoler(`- 耗时: ${Math.ceil((cost * 100) / 1000) / 100}s`)
       } else {
         consoler(`- 耗时: ${cost}ms`)
       }
@@ -282,7 +285,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
         // !!! 跳过 !!! Modern Mode 第一轮 (Legacy Bundle)：生成兼容旧浏览器的 JS 文件
         return
       }
-      await new Promise(resolve => setTimeout(resolve, 737));
+      await new Promise((resolve) => setTimeout(resolve, 737))
       try {
         await endHandler()
       } catch (err) {
@@ -292,23 +295,21 @@ function unpluginFactory(options: WebDeployer.InputOptions): UnpluginOptions & {
   }
 }
 
-const Deployer = {
+const Instance: WebDeployer.Instance = {
   ...createUnplugin(unpluginFactory as any),
   exec: (options) => unpluginFactory(options).execute()
-} as Pick<UnpluginInstance<WebDeployer.InputOptions, boolean>, 'rollup' | 'webpack'> & {
-  vite: UnpluginInstance<WebDeployer.InputOptions, boolean>['rollup']
-  exec: WebDeployer.Exec
 }
 
-export default Deployer
-export const RollupPluginDeployer = Deployer.rollup
-export const VitePluginDeployer = Deployer.vite
+export default Instance
+export const RollupPluginDeployer = Instance.rollup
+export const VitePluginDeployer = Instance.vite
 export class DeployerWebpackPlugin {
   private instance: WebpackPluginInstance
   constructor(options?: WebDeployer.InputOptions) {
-    this.instance = Deployer.webpack(options)
+    this.instance = Instance.webpack(options)
   }
   apply(compiler: any): void {
     this.instance.apply(compiler)
   }
 }
+export { default as WebDeployer } from './type'
