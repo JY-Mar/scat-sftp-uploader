@@ -278,7 +278,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
         if (!localSrc.startsWith(uploadConfig.pkgDir)) {
           continue
         }
-        if (total === 1) {
+        if (total === 1 && fs.lstatSync(localSrc).isDirectory()) {
           const filepaths = await globFiles(localSrc, true)
           if (!filepaths.length) {
             continue
@@ -286,16 +286,43 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
         }
         let targetSrc = localSrc.replace(uploadConfig.pkgDir, uploadConfig.sshPath)
         targetSrc = targetSrc.replace(/\\/g, '/').replace(/\/+/g, '/')
-        processing.update({ completed: i, total })
+        if (!targetSrc.endsWith('/')) {
+          targetSrc = targetSrc + '/'
+        }
         try {
           if (fs.lstatSync(localSrc).isDirectory()) {
             // 是目录
+            // consoler.info(`- 上传目录: ${localSrc} → ${targetSrc}`)
             await sftp.mkdir(targetSrc, true)
           } else {
+            const isEnd = (path?: string) => {
+              return typeof path === 'string' && path && path.endsWith('/')
+            }
+            const recursive = () => {
+              const localSrcIsEnd = isEnd(localSrc)
+              const targetSrcIsEnd = isEnd(targetSrc)
+              if (localSrcIsEnd) {
+                // 文件，必须去掉 localSrc 最后一个斜杠
+                localSrc = localSrc.substring(0, localSrc.length - 1)
+              }
+              if (targetSrcIsEnd) {
+                // 文件，必须去掉 targetSrc 最后一个斜杠
+                targetSrc = targetSrc.substring(0, targetSrc.length - 1)
+              }
+              if (localSrcIsEnd || targetSrcIsEnd) {
+                recursive()
+              } else {
+                return Promise.resolve()
+              }
+            }
+            await recursive()
+            // consoler.info(`- 上传文件: ${localSrc} → ${targetSrc}`)
             await sftp.put(localSrc, targetSrc)
           }
         } catch (_) {
           // 上传失败
+        } finally {
+          processing.update({ completed: i, total })
         }
       }
       processing.stop('上传成功', 'success')
