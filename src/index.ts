@@ -368,11 +368,9 @@ const Instance: WebDeployer.Instance = {
   ...createUnplugin(unpluginFactory as any),
   exec: (options) => unpluginFactory(options).execute()
 }
-
-export default Instance
-export const RollupPluginDeployer = Instance.rollup
-export const VitePluginDeployer = Instance.vite
-export class DeployerWebpackPlugin {
+const RollupPluginDeployer = Instance.rollup
+const VitePluginDeployer = Instance.vite
+class DeployerWebpackPlugin {
   private instance: WebpackPluginInstance
   constructor(options?: WebDeployer.InputOptions) {
     this.instance = Instance.webpack(options)
@@ -381,4 +379,6 @@ export class DeployerWebpackPlugin {
     this.instance.apply(compiler)
   }
 }
-export type DeployerInputOptions = WebDeployer.InputOptions
+type DeployerInputOptions = WebDeployer.InputOptions
+
+export { Instance as default, RollupPluginDeployer, VitePluginDeployer, DeployerWebpackPlugin, DeployerInputOptions }

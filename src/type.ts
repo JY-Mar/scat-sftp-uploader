@@ -111,11 +111,6 @@ namespace WebDeployer {
   export type OptionsForCreateUnplugin = UnpluginOptions & { execute: () => Promise<void> }
 
   /**
-   * External Executable Function
-   */
-  export type Exec = (Options: InputOptions) => any
-
-  /**
    * Console
    */
   export namespace Consoler {
@@ -126,11 +121,11 @@ namespace WebDeployer {
     /**
      * Console output type
      */
-    export type MsgType = typeof MSG_TYPES[number]
+    export type MsgType = (typeof MSG_TYPES)[number]
     /**
      * Console output type
      */
-    export type MsgInputType = MsgType | string & Record<never, never>
+    export type MsgInputType = MsgType | (string & Record<never, never>)
     /**
      * Console instance
      */
@@ -144,7 +139,10 @@ namespace WebDeployer {
    */
   export type Instance = Pick<UnpluginInstance<InputOptions, boolean>, 'rollup' | 'webpack'> & {
     vite: UnpluginInstance<InputOptions, boolean>['rollup']
-    exec: Exec
+    /**
+     * External Executable Function
+     */
+    exec: (options: InputOptions) => Promise<void>
   }
 }
 
