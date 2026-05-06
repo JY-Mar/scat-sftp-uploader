@@ -188,7 +188,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
     const total = list.length
     if (total > 0) {
       // 删除服务器上文件(夹)
-      const processing = progbar('删除中') // 上传进度条
+      const processing = progbar('删除进度') // 上传进度条
       let i = 0
       const errors: string[] = []
       for (const fileInfo of list) {
@@ -261,7 +261,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
 
     const total: number = files.length
     if (total > 0) {
-      const processing = progbar('上传中') // 上传进度条
+      const processing = progbar('上传进度') // 上传进度条
       let i = 0
       processing.update({ completed: i, total })
 
