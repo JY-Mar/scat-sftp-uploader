@@ -23,7 +23,7 @@ namespace WebDeployer {
        * Stop updating progress bar processing
        * @param text Text to display before stopping
        */
-      stop(text?: string, type?: Consoler.MsgInputType, keepOld?: boolean): void
+      stop(text?: string, type?: Consoler.MsgInputType, keepOld?: boolean, stop_noprogress?: boolean): void
     }
     /**
      * Progress bar update options
@@ -103,7 +103,40 @@ namespace WebDeployer {
      * Preview URL (Optional)
      */
     previewPath?: string
+    /**
+     * 上传模式
+     *
+     * Upload mode
+     * @default 'archive'
+     * @description `'archive'` — package the local directory into a compressed archive and upload as a single file, then extract on the remote server (fast, low bandwidth). `'sftp'` — upload individual files one by one via SFTP (original behavior).
+     */
+    mode?: UploadMode
+    /**
+     * 压缩包格式（mode='archive' 时生效）
+     *
+     * Archive format (effective when mode='archive')
+     * @default 'tgz'
+     * @description `'tgz'` uses tar.gz format, relying on the `tar` command on the remote server. `'zip'` uses zip format, the server must have the `unzip` command installed; a capability check will be performed before compression.
+     */
+    archiveFormat?: ArchiveFormat
+    /**
+     * 是否删除远程压缩包（mode='archive' 时生效）
+     *
+     * Whether to delete the remote archive after extraction (effective when mode='archive')
+     * @default true
+     */
+    removeRemoteArchive?: boolean
   }
+
+  /**
+   * Upload mode
+   */
+  export type UploadMode = 'archive' | 'sftp'
+
+  /**
+   * Archive format
+   */
+  export type ArchiveFormat = 'zip' | 'tgz'
 
   /**
    * Options for create unplugin
@@ -130,7 +163,7 @@ namespace WebDeployer {
      * Console instance
      */
     export type Instance = {
-      [K in MsgType]: (text: string) => void
+      [K in MsgType]: (text: string, eol?: 'start' | 'end' | 'both' | 'none') => void
     }
   }
 

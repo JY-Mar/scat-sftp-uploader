@@ -1,6 +1,6 @@
 {
   "name": "@scat1995/deployer",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "description": "Web project deployer",
   "type": "module",
   "author": "JY-Mar",
@@ -38,9 +38,11 @@
     "publish-npmjs.beta": "npm publish --tag beta --access public"
   },
   "dependencies": {
+    "archiver": "^7.0.1",
     "chalk": "^4.1.2",
     "glob": "^13.0.6",
     "log-update": "^8.0.0",
+    "ssh2": "^1.17.0",
     "ssh2-sftp-client": "^12.1.1",
     "unplugin": "^3.0.0"
   },
@@ -61,6 +63,7 @@
     }
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
     "@types/glob": "^9.0.0",
     "@types/node": "^24.3.0",
     "@types/ssh2-sftp-client": "^9.0.6",

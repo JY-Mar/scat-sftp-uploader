@@ -3,15 +3,16 @@ import fs from 'fs'
 import path from 'path'
 import { glob } from 'glob'
 import SftpClient from 'ssh2-sftp-client'
-import { consoler, progbar } from './utils'
+import { consoler, progbar, createLocalArchive, execRemoteCommand, checkRemoteCommand, normalizePath, capitalizeWindowsDrive, ensureTrailingSlash } from './utils'
 import { type WebpackPluginInstance, createUnplugin } from 'unplugin'
 import WebDeployer from './type'
+import { DEFAULT_OPTIONS } from './options'
 
 const name = 'Deployer'
 
 function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.OptionsForCreateUnplugin {
   const sftp = new SftpClient()
-  let trim: any = null,
+  let trim: ReturnType<typeof setTimeout> | null = null,
     isFirst: boolean = true, // 防止多次调用
     timer: number = 0
 
@@ -19,25 +20,21 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
     pkgDir: typeof options.dir === 'string' ? options.dir : '',
     sshPath: typeof options.url === 'string' ? options.url : '',
     previewPath: typeof options.previewPath === 'string' ? options.previewPath : '',
-    delay: typeof options.delay === 'number' ? options.delay : 0,
+    delay: typeof options.delay === 'number' ? options.delay : DEFAULT_OPTIONS.delay,
     uploadFilter: options.uploadFilter && typeof options?.uploadFilter === 'function' ? options.uploadFilter : undefined,
-    deleteFilter: options.deleteFilter && typeof options?.deleteFilter === 'function' ? options.deleteFilter : undefined
+    deleteFilter: options.deleteFilter && typeof options?.deleteFilter === 'function' ? options.deleteFilter : undefined,
+    mode: options.mode === 'archive' || options.mode === 'sftp' ? options.mode : DEFAULT_OPTIONS.mode,
+    archiveFormat: (options.archiveFormat === 'zip' ? 'zip' : DEFAULT_OPTIONS.archiveFormat) as WebDeployer.ArchiveFormat,
+    removeRemoteArchive: typeof options.removeRemoteArchive === 'boolean' ? options.removeRemoteArchive : DEFAULT_OPTIONS.removeRemoteArchive
   }
   if (uploadConfig?.pkgDir) {
-    uploadConfig.pkgDir = uploadConfig.pkgDir.replace(/\\/g, '/').replace(/\/+/g, '/')
-    if (/^[a-z]:\//.test(uploadConfig.pkgDir)) {
-      // 如果是 Windows 路径，将第一个字母（盘符）大写
-      uploadConfig.pkgDir = uploadConfig.pkgDir.charAt(0).toUpperCase() + uploadConfig.pkgDir.slice(1)
-    }
-    if (!uploadConfig.pkgDir.endsWith('/')) {
-      uploadConfig.pkgDir = uploadConfig.pkgDir + '/' // 如果本地目录没有以 / 结尾，自动加上，以与 sshPath 保持一致
-    }
+    uploadConfig.pkgDir = normalizePath(uploadConfig.pkgDir)
+    uploadConfig.pkgDir = capitalizeWindowsDrive(uploadConfig.pkgDir)
+    uploadConfig.pkgDir = ensureTrailingSlash(uploadConfig.pkgDir)
   }
   if (uploadConfig?.sshPath) {
-    uploadConfig.sshPath = uploadConfig.sshPath.replace(/\\/g, '/').replace(/\/+/g, '/')
-    if (!uploadConfig.sshPath.endsWith('/')) {
-      uploadConfig.sshPath = uploadConfig.sshPath + '/' // 如果上传目录没有以 / 结尾，自动加上，否则找不到文件
-    }
+    uploadConfig.sshPath = normalizePath(uploadConfig.sshPath)
+    uploadConfig.sshPath = ensureTrailingSlash(uploadConfig.sshPath)
   }
 
   /**
@@ -45,7 +42,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
    */
   const sshConfig: SftpClient.ConnectOptions = {
     host: options.host, // 服务器地址
-    port: Number(options.port ?? 22),
+    port: Number(options.port ?? DEFAULT_OPTIONS.port),
     username: options.username,
     password: options.password
   }
@@ -102,13 +99,16 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
       } else {
         timer = Date.now()
 
-        consoler.info(`> SSH 开始连接`)
+        const connecting = progbar('> SSH 开始连接')
+
+        // consoler.info(`> SSH 开始连接`)
 
         sftp
           .connect(sshConfig)
           .then(() => {
             // 连接服务器
-            consoler.success('> SSH 连接成功')
+            connecting.stop('> SSH 连接成功', 'success', true, true)
+            // consoler.success('> SSH 连接成功', 'none')
             remakeDirAndExecUpload()
               .then(() => {
                 sftp.end()
@@ -119,9 +119,10 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
                 reject(e)
               })
           })
-          .catch((err: string) => {
+          .catch((err) => {
             sftp.end()
-            consoler.error(`> SSH 连接失败：` + err)
+            connecting.stop('> SSH 连接失败', 'error', true, true)
+            // consoler.error(`> SSH 连接失败：` + err)
             reject(err)
           })
       }
@@ -134,6 +135,14 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
    */
   async function remakeDirAndExecUpload(): Promise<void> {
     return new Promise((resolve, reject) => {
+      // 压缩包模式：打包 → 上传 → 远程解压
+      if (uploadConfig.mode === 'archive') {
+        uploadWithArchive()
+          .then(() => resolve())
+          .catch((err) => reject(err))
+        return
+      }
+
       const recursive = (callback: (...o: any[]) => any): void => {
         sftp
           .list(uploadConfig.sshPath)
@@ -168,7 +177,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
                 consoler.info(`- 远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"创建成功`)
                 recursive(callback)
               })
-              .catch((err: string) => {
+              .catch((err) => {
                 consoler.error(`- Error：远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"创建失败：${err}`)
                 reject(`- Error：远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"创建失败：${err}`)
               })
@@ -230,7 +239,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
         resolve([])
         return
       }
-      const pattern = `${dir}${dir.endsWith('/') ? '**' : '/**'}`.replace(/\\/g, '/').replace(/\/+/g, '/')
+      const pattern = ensureTrailingSlash(normalizePath(dir)) + '**'
       // 获取本地路径所有文件
       glob(pattern, { ignore: ignoreBase ? ['.'] : undefined })
         .then((paths: string[]) => {
@@ -341,6 +350,90 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
     }
 
     return Promise.resolve()
+  }
+
+  /**
+   * 压缩包模式上传：打包 → 上传 → 远程解压
+   * @return       {*}
+   */
+  async function uploadWithArchive(): Promise<void> {
+    const format = uploadConfig.archiveFormat
+    const ext = format === 'zip' ? 'zip' : 'tar.gz'
+    const dirName = path.basename(uploadConfig.pkgDir.replace(/\/$/, ''))
+    const archiveName = `${dirName}-${Date.now()}.${ext}`
+    const localArchivePath = path.join(os.tmpdir(), archiveName).replace(/\\/g, '/')
+    const sshPath = uploadConfig.sshPath.replace(/\/$/, '')
+    const parentPath = path.dirname(sshPath).replace(/\\/g, '/')
+    const remoteArchivePath = `${parentPath}/${archiveName}`
+
+    try {
+      // zip 格式前置检测
+      if (format === 'zip') {
+        consoler.info('- 检测远程服务器 unzip 支持...')
+        const hasUnzip = await checkRemoteCommand('unzip', sshConfig)
+        if (!hasUnzip) {
+          throw new Error('远程服务器未安装 unzip 命令，无法使用 zip 格式。请安装 unzip 或切换为 tar 格式。')
+        }
+        consoler.success('- 远程服务器支持 unzip')
+      }
+
+      // 1. 创建压缩包
+      consoler.info(`- 正在打包本地文件 (${format})...`)
+      const packing = progbar('打包进度')
+      packing.update({ completed: 0, total: 1 })
+      const sourceDir = uploadConfig.pkgDir.replace(/\/$/, '')
+      await createLocalArchive(sourceDir, localArchivePath, format)
+      const stats = fs.statSync(localArchivePath)
+      packing.update({ completed: 1, total: 1 })
+      packing.stop(`打包完成: ${(stats.size / 1024 / 1024).toFixed(2)} MB`, 'success')
+
+      // 2. 上传压缩包
+      consoler.info('- 正在上传压缩包...')
+      const uploading = progbar('上传进度')
+      uploading.update({ completed: 0, total: 1 })
+      await sftp.put(localArchivePath, remoteArchivePath)
+      uploading.update({ completed: 1, total: 1 })
+      uploading.stop('压缩包上传完成', 'success')
+
+      // 3. 远程解压
+      consoler.info('- 正在远程解压...')
+      const extracting = progbar('解压进度')
+      extracting.update({ completed: 0, total: 1 })
+      const extractCmd = format === 'zip' ? `unzip -o ${remoteArchivePath} -d ${sshPath}` : `tar -xzf ${remoteArchivePath} -C ${sshPath}`
+      const commands = [`rm -rf ${sshPath}`, `mkdir -p ${sshPath}`, extractCmd]
+      if (uploadConfig.removeRemoteArchive) {
+        commands.push(`rm -f ${remoteArchivePath}`)
+      }
+      for (const cmd of commands) {
+        await execRemoteCommand(cmd, sshConfig)
+      }
+      extracting.update({ completed: 1, total: 1 })
+      extracting.stop('解压完成', 'success')
+      if (uploadConfig.removeRemoteArchive) {
+        consoler.info(`- 远程压缩包已删除: ${remoteArchivePath}`)
+      } else {
+        consoler.info(`- 远程压缩包已保留: ${remoteArchivePath}`)
+      }
+
+      // 4. 清理本地压缩包
+      fs.unlinkSync(localArchivePath)
+
+      const cost = Date.now() - timer
+      if (cost > 1000) {
+        consoler.info(`- 上传耗时: ${Math.ceil((cost * 100) / 1000) / 100}s`)
+      } else {
+        consoler.info(`- 上传耗时: ${cost}ms`)
+      }
+      if (uploadConfig.previewPath) {
+        consoler.link(`- 预览地址: ${uploadConfig.previewPath}`)
+      }
+    } catch (err) {
+      // 清理本地临时文件
+      if (fs.existsSync(localArchivePath)) {
+        fs.unlinkSync(localArchivePath)
+      }
+      throw err
+    }
   }
 
   return {

@@ -1,6 +1,6 @@
 # @scat1995/deployer
 
-> `@scat1995/deployer` 是一款基于 `ssh2-sftp-client` 封装的文件上传插件，支持 `webpack`、 `vite` 及 `rollup`，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`、 `vite` 或 `rollup` 插件或`单独`使用，支持自动创建上传目录。
+> `@scat1995/deployer` 是一款基于 `ssh2-sftp-client`、`ssh2`、`archiver` 封装的文件上传插件，支持 `webpack`、 `vite` 及 `rollup`，可以实现将打包好的项目文件一键上传到指定的sftp服务器目录，支持集成为`webpack`、 `vite` 或 `rollup` 插件或`单独`使用，支持自动创建上传目录。
 
 ## Install
 
@@ -11,13 +11,12 @@ yarn add @scat1995/deployer --save-dev
 npm install @scat1995/deployer --save-dev
 ```
 
-## 配置
+## Configuration
+
+### Basic
 
 ```javascript
-const path = require('path')
-const DeployerWebpackPlugin = require('@scat1995/deployer')
-
-const sftp = DeployerWebpackPlugin({
+{
   dir: path.join(__dirname, 'dist/'), // 需要上传文件的目录
   url: '******', // 上传到的目录
   host: '*****', // sftp地址
@@ -32,16 +31,61 @@ const sftp = DeployerWebpackPlugin({
   deleteFilter(file) => file.name.endsWith(.gz),
   // 预览链接接地址（可选）
   previewPath: 'https://www.baidu.com'
-})
+}
 ```
 
-## 使用
+### Advanced: Upload Mode (For 2.0.0+)
 
-### 配合打包命令使用
+#### 'archiver' Mode
+
+Will package the local directory into a compressed archive and upload as a single file, then extract on the remote server (fast, low bandwidth)
 
 ```javascript
-// webpack中使用
-//vue.config.js
+{
+  ...
+  mode: 'archiver',
+  archiveFormat: 'tar',
+  removeRemoteArchive: true
+  ...
+}
+```
+
+#### 'sftp' Mode
+
+Will upload individual files one by one via SFTP (original behavior)
+
+```javascript
+{
+  ...
+  mode: 'sftp'
+  ...
+}
+```
+
+## Usage
+
+### package.json
+
+```json
+{
+  // package.json
+  // 1. window
+  "scripts": {
+    "build": "vue-cli-service build --mode development",
+    "deploy": "set UPLOAD=true && yarn build"
+  },
+  // 2. liunx or macos
+  "scripts": {
+    "build": "vue-cli-service build --mode development",
+    "deploy": "export UPLOAD=true && yarn build"
+  }
+}
+```
+
+### Webpack
+
+```javascript
+// vue.config.js
 const DeployerWebpackPlugin = require('@scat1995/deployer')
 
 module.exports = {
@@ -53,8 +97,11 @@ module.exports = {
     }
   }
 }
+```
 
-// vite中使用
+### Vite
+
+```javascript
 //vite.config.js
 import VitePluginDeployer from '@scat1995/deployer'
 
@@ -63,25 +110,12 @@ export default defineConfig({
     VitePluginDeployer({ ... })
   ]
 })
-
-// package.json
-// 1、window环境
-"scripts": {
-  "build": "vue-cli-service build --mode development",
-  "deploy": "set UPLOAD=true && yarn build"
-}
-// 2、liunx or macos环境
-"scripts": {
-  "build": "vue-cli-service build --mode development",
-  "deploy": "export UPLOAD=true && yarn build"
-}
-// 使用 yarn deploy 或 npm run deploy
 ```
 
-### 上传任意项目
+### NodeJs
 
 ```javascript
-// 1、在项目中创建uploader.js
+// 1. 在项目中创建uploader.js
 // 2、配置和webpack插件模式相同
 const Deployer = require('@scat1995/deployer').default
 Deployer.exec({ ... })
