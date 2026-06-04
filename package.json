@@ -10,6 +10,9 @@
     "type": "git",
     "url": "https://github.com/JY-Mar/scat-web-deployer.git"
   },
+  "bugs": {
+    "url": "https://github.com/JY-Mar/scat-web-deployer/issues"
+  },
   "keywords": [
     "sftp-uploader",
     "web-deployer",
@@ -32,7 +35,7 @@
     "unlink-g": "npm unlink @scat1995/deployer -g",
     "reinstall": "npm install",
     "publish-npmjs": "npm publish --access public",
-    "publish-beta-npmjs": "npm publish --tag beta --access public"
+    "publish-npmjs.beta": "npm publish --tag beta --access public"
   },
   "dependencies": {
     "chalk": "^4.1.2",
