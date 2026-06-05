@@ -101,14 +101,11 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
 
         const connecting = progbar('> SSH 开始连接')
 
-        // consoler.info(`> SSH 开始连接`)
-
         sftp
           .connect(sshConfig)
           .then(() => {
             // 连接服务器
             connecting.stop('> SSH 连接成功', 'success', true, true)
-            // consoler.success('> SSH 连接成功', 'none')
             remakeDirAndExecUpload()
               .then(() => {
                 sftp.end()
@@ -122,7 +119,6 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
           .catch((err) => {
             sftp.end()
             connecting.stop('> SSH 连接失败', 'error', true, true)
-            // consoler.error(`> SSH 连接失败：` + err)
             reject(err)
           })
       }
@@ -170,11 +166,11 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
             })
           })
           .catch(() => {
-            consoler.info(`- 远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"未找到，尝试创建目录`)
+            consoler.warning(`- 远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"未找到，尝试创建目录`)
             sftp
               .mkdir(uploadConfig.sshPath, true)
               .then((res: any) => {
-                consoler.info(`- 远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"创建成功`)
+                consoler.success(`- 远程目录"${sshConfig.host}:${sshConfig.port}${uploadConfig.sshPath}"创建成功`)
                 recursive(callback)
               })
               .catch((err) => {
@@ -438,8 +434,7 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
 
   return {
     name,
-    // @ts-ignore
-    execute: startUpload,
+    execute: () => startUpload(),
     async writeBundle() {
       // 判断 Vue CLI 的多编译器模式
       if (process.env.VUE_CLI_MODERN_MODE && !process.env.VUE_CLI_MODERN_BUILD) {

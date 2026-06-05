@@ -1,7 +1,7 @@
 {
   "name": "@scat1995/deployer",
-  "version": "2.0.0",
-  "description": "Web project deployer",
+  "version": "2.1.0",
+  "description": "Dist folder Uploader",
   "type": "module",
   "author": "JY-Mar",
   "license": "MIT",
@@ -14,7 +14,7 @@
     "url": "https://github.com/JY-Mar/scat-web-deployer/issues"
   },
   "keywords": [
-    "sftp-uploader",
+    "deployer",
     "web-deployer",
     "scientificat1995"
   ],
@@ -22,7 +22,10 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    "types": "./dist/index.d.ts",
+    "types": {
+      "import": "./dist/index.d.ts",
+      "require": "./dist/index.d.cts"
+    },
     "require": "./dist/index.cjs",
     "import": "./dist/index.js"
   },
@@ -30,7 +33,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "rimraf dist && tsup",
+    "build": "rimraf dist && tsup && node scripts/rewritecjs.cjs",
     "link-g": "npm link",
     "unlink-g": "npm unlink @scat1995/deployer -g",
     "reinstall": "npm install",
@@ -38,6 +41,7 @@
     "publish-npmjs.beta": "npm publish --tag beta --access public"
   },
   "dependencies": {
+    "@scat1995/archiver": "^2.1.2",
     "archiver": "^7.0.1",
     "chalk": "^4.1.2",
     "glob": "^13.0.6",

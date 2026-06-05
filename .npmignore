@@ -1,9 +1,7 @@
-dist/rollup.config.dev.js
-dist/vite.config.js
-
 node_modules/
 src/
 __test__/
+scripts/
 
 .editorconfig
 .gitignore

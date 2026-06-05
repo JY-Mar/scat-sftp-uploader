@@ -1,8 +1,7 @@
 import os from 'os'
-import fs from 'fs'
 import chalk from 'chalk'
 import { createLogUpdate } from 'log-update'
-import archiver from 'archiver'
+import Archiver from '@scat1995/archiver'
 import { Client } from 'ssh2'
 import type { ConnectConfig } from 'ssh2'
 import WebDeployer from './type'
@@ -74,15 +73,16 @@ export function formatCost(ms: number): string {
 /**
  * 日志的 chalk 包装
  * @param        {string} text
- * @param        {WebDeployer} type
+ * @param        {WebDeployer} msgType
  * @return       {*}
  */
-export function colorful(text: string, type: WebDeployer.Consoler.MsgInputType = 'info'): string {
+export function colorful(text: string, msgType: WebDeployer.Consoler.MsgInputType = 'info'): string {
   let color = '#00ffff'
-  switch (type) {
+  switch (msgType) {
     case 'success':
       color = '#7fff58'
       break
+    case 'warn':
     case 'warning':
       color = '#faad14'
       break
@@ -114,17 +114,18 @@ export function colorful(text: string, type: WebDeployer.Consoler.MsgInputType =
 /**
  * 日志包装后的文字
  * @param        {string} text
- * @param        {WebDeployer} type
+ * @param        {WebDeployer} msgType
  * @return       {*}
  */
-export function colorfulWithTitle(text: string, type: WebDeployer.Consoler.MsgInputType = 'info'): string {
+export function colorfulWithTitle(text: string, msgType: WebDeployer.Consoler.MsgInputType = 'info'): string {
   let outputText: string = text
   let icon = ''
 
-  switch (type) {
+  switch (msgType) {
     case 'success':
       icon = '✅'
       break
+    case 'warn':
     case 'warning':
       icon = '⚠️'
       break
@@ -147,20 +148,20 @@ export function colorfulWithTitle(text: string, type: WebDeployer.Consoler.MsgIn
       icon = '🔧'
       break
     default:
-      icon = type ? type : ' '
+      icon = msgType ? msgType : ' '
       break
   }
   const pkg = colorful(`[${pkgname} ${icon}]`, 'emphasize')
   outputText = `${pkg} ${outputText}`
-  return colorful(outputText, type)
+  return colorful(outputText, msgType)
 }
 
-function _consolerOut(text: string, type: WebDeployer.Consoler.MsgType, eol: 'start' | 'end' | 'both' | 'none' = 'start'): void {
-  let outputText: string = colorfulWithTitle(text, type)
+function _consolerOut(text: string, msgType: WebDeployer.Consoler.MsgType, eol: 'start' | 'end' | 'both' | 'none' = 'start'): void {
+  let outputText: string = colorfulWithTitle(text, msgType)
   if (!outputText.startsWith(os.EOL) && eol === 'start') {
     outputText = os.EOL + outputText
   }
-  if (outputText.endsWith(os.EOL) && (eol !== 'end' && eol !== 'both')) {
+  if (outputText.endsWith(os.EOL) && eol !== 'end' && eol !== 'both') {
     outputText = outputText.slice(0, -os.EOL.length)
   }
 
@@ -170,9 +171,11 @@ function _consolerOut(text: string, type: WebDeployer.Consoler.MsgType, eol: 'st
 /**
  * 打印日志
  * @param text 内容
- * @param type 类型
+ * @param msgType 类型
  */
-export const consoler = Object.fromEntries(WebDeployer.Consoler.MSG_TYPES.map((type) => [type, (text: string, eol: 'start' | 'end' | 'both' | 'none' = 'start') => _consolerOut(text, type, eol)])) as WebDeployer.Consoler.Instance
+export const consoler = Object.fromEntries(
+  WebDeployer.Consoler.MSG_TYPES.map((msgType) => [msgType, (text: string, eol: 'start' | 'end' | 'both' | 'none' = 'start') => _consolerOut(text, msgType, eol)])
+) as WebDeployer.Consoler.Instance
 
 /**
  * 进度条
@@ -222,14 +225,14 @@ export function progbar(description: string = 'Progress', bar_length: number = 2
         logger.persist(text)
       }
     },
-    stop(text, type = 'success', keepOld = true, stop_noprogress = true) {
+    stop(text, msgType = 'success', keepOld = true, stop_noprogress = true) {
       if (text) {
         const finalIndex = index <= 0 ? 1 : index
         const processing = drawPercent(finalIndex, finalIndex, stop_noprogress || noprogress, ': ')
         if (keepOld) {
-          logger.persist(colorful(colorfulWithTitle('', type) + `- ${text}${processing}`, type))
+          logger.persist(colorful(colorfulWithTitle('', msgType) + `- ${text}${processing}`, msgType))
         } else {
-          logger(colorful(colorfulWithTitle('', type) + `- ${text}${processing}`, type))
+          logger(colorful(colorfulWithTitle('', msgType) + `- ${text}${processing}`, msgType))
         }
       }
       logger.done()
@@ -246,25 +249,22 @@ export function progbar(description: string = 'Progress', bar_length: number = 2
  */
 export async function createLocalArchive(sourceDir: string, outputPath: string, format: WebDeployer.ArchiveFormat): Promise<void> {
   return new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(outputPath)
-    const archive =
-      format === 'zip'
-        ? archiver('zip', { zlib: { level: 9 } })
-        : archiver('tar', { gzip: true })
-
-    output.on('close', () => resolve())
-    archive.on('error', (err) => reject(err))
-    archive.on('warning', (err) => {
-      if (err.code === 'ENOENT') {
-        consoler.warning(`- 压缩警告: ${err.message}`)
-      } else {
+    Archiver.exec(
+      {
+        sourceDir,
+        format,
+        targetPath: outputPath,
+        includeSource: false
+      },
+      true
+    )
+      .then(() => {
+        resolve()
+      })
+      .catch((err) => {
+        consoler.error(`- 压缩错误: ${err}`)
         reject(err)
-      }
-    })
-
-    archive.pipe(output)
-    archive.directory(sourceDir, false)
-    archive.finalize()
+      })
   })
 }
 

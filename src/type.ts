@@ -23,7 +23,7 @@ namespace WebDeployer {
        * Stop updating progress bar processing
        * @param text Text to display before stopping
        */
-      stop(text?: string, type?: Consoler.MsgInputType, keepOld?: boolean, stop_noprogress?: boolean): void
+      stop(text?: string, msgType?: Consoler.MsgInputType, keepOld?: boolean, stop_noprogress?: boolean): void
     }
     /**
      * Progress bar update options
@@ -141,7 +141,13 @@ namespace WebDeployer {
   /**
    * Options for create unplugin
    */
-  export type OptionsForCreateUnplugin = UnpluginOptions & { execute: () => Promise<void> }
+  export type OptionsForCreateUnplugin = UnpluginOptions & { execute: Execute }
+
+  /**
+   * Internal Execute function
+   * @return       {Promise<void>}
+   */
+  export type Execute = () => Promise<void>
 
   /**
    * Console
@@ -150,7 +156,7 @@ namespace WebDeployer {
     /**
      * All Console output types
      */
-    export const MSG_TYPES = ['success', 'warning', 'error', 'link', 'info', 'tip', 'emphasize', 'debug'] as const
+    export const MSG_TYPES = ['success', 'warn', 'warning', 'error', 'link', 'info', 'tip', 'emphasize', 'debug'] as const
     /**
      * Console output type
      */
@@ -174,6 +180,8 @@ namespace WebDeployer {
     vite: UnpluginInstance<InputOptions, boolean>['rollup']
     /**
      * External Executable Function
+     * @param        {InputOptions} options Input Archiver Options
+     * @return       {*}
      */
     exec: (options: InputOptions) => Promise<void>
   }
