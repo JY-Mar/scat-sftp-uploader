@@ -117,7 +117,11 @@ export default defineConfig({
 ```javascript
 // 1. 在项目中创建uploader.js
 // 2、配置和webpack插件模式相同
+
+// For 1.0.0 ~ 2.0.0
 const Deployer = require('@scat1995/deployer').default
+// For 2.1.0
+const Deployer = require('@scat1995/deployer')
 Deployer.exec({ ... })
 // 然后在项目根目录终端下运行如下命令
 node uploader.js
