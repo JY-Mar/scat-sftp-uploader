@@ -11,6 +11,32 @@ import { DEFAULT_OPTIONS } from './options'
 const name = 'Deployer'
 
 function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.OptionsForCreateUnplugin {
+  let isError = false
+  if (options === undefined) {
+    consoler.error('"options" is required')
+    isError = true
+  } else if (Object.prototype.toString.call(options) !== '[object Object]' || Object.keys(options).length === 0) {
+    consoler.error('"options" must be a valid JSON object')
+    isError = true
+  } else {
+    // 必填字段判空：dir / url / host
+    for (const key of ['dir', 'url', 'host'] as const) {
+      if (typeof options[key] !== 'string' || options[key].trim() === '') {
+        consoler.error(`"options.${key}" is required and must be a non-empty string`)
+        isError = true
+      }
+    }
+  }
+  if (isError) {
+    // 仅打印错误，返回空插件，不中断外部打包流程
+    return {
+      name,
+      async execute() {
+        return Promise.resolve()
+      }
+    }
+  }
+
   const sftp = new SftpClient()
   let trim: ReturnType<typeof setTimeout> | null = null,
     isFirst: boolean = true, // 防止多次调用
@@ -434,7 +460,9 @@ function unpluginFactory(options: WebDeployer.InputOptions): WebDeployer.Options
 
   return {
     name,
-    execute: () => startUpload(),
+    async execute() {
+      return startUpload()
+    },
     async writeBundle() {
       // 判断 Vue CLI 的多编译器模式
       if (process.env.VUE_CLI_MODERN_MODE && !process.env.VUE_CLI_MODERN_BUILD) {
