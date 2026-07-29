@@ -41,7 +41,7 @@
     "publish-npmjs.beta": "npm publish --tag beta --access public"
   },
   "dependencies": {
-    "@scat1995/archiver": "^2.1.2",
+    "@scat1995/archiver": "^2.1.3",
     "chalk": "^4.1.2",
     "glob": "^13.0.6",
     "log-update": "^8.0.0",
